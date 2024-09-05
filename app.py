@@ -1,20 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 import cloudinary
-import cloudinary.uploader
 import cloudinary.api
-
-
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
+app = Flask(__name__)
 
-# Load environment variables from .env file
 load_dotenv()
+
+# Access the variables
 cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
 api_key = os.getenv("CLOUDINARY_API_KEY")
 api_secret = os.getenv("CLOUDINARY_API_SECRET")
-
-app = Flask(__name__)
-
 
 # Configure Cloudinary
 cloudinary.config(
@@ -23,31 +19,23 @@ cloudinary.config(
   api_secret=api_secret
 )
 
-
-
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    # Check if the request has the file part
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-
-    file = request.files['file']
-    
-    # Upload the file to Cloudinary
+@app.route('/photos', methods=['GET'])
+def get_photos():
     try:
-        result = cloudinary.uploader.upload(file, folder="user_uploads", context="caption=Uploaded from Android App")
-        return jsonify(result), 200
+        # Fetch all images with pagination support
+        resources = cloudinary.api.resources(resource_type="image", max_results=200,context=True)
+        next_cursor = resources.get("next_cursor")
+        print(resources)
+        photos = []
+        for resource in resources['resources']:
+            photos.append({
+                "public_id": resource.get("public_id"),
+                "secure_url": resource.get("secure_url"),
+                "title": resource.get("context", {}).get("custom", {}).get("caption", "No title"),
+                "description": resource.get("context", {}).get("custom", {}).get("alt", "No description")
+            })
+        
+        # Return the photo data and the next cursor for pagination
+        return jsonify({"photos": photos}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# Retrieve resource details (by public_id)
-@app.route("/resource/<public_id>", methods=["GET"])
-def get_resource(public_id):
-    try:
-        result = cloudinary.api.resource(public_id)
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == "__main__":
-    app.run(debug=True)
